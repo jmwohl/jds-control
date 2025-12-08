@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fan Remote</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: #1e293b;
+            color: white;
+            line-height: 1.5;
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 400px;
+            margin: 0 auto;
+            padding: 1rem;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .header {
+            text-align: center;
+            padding: 1rem 0;
+        }
+
+        .header h1 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .status {
+            background: #334155;
+            border-radius: 12px;
+            padding: 0.75rem 1rem;
+            text-align: center;
+            font-size: 0.9rem;
+            color: #cbd5e1;
+        }
+
+        .control-row {
+            background: #334155;
+            border-radius: 12px;
+            padding: 1rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .control-info {
+            flex: 1;
+        }
+
+        .control-label {
+            font-size: 0.875rem;
+            color: #94a3b8;
+            margin-bottom: 0.25rem;
+        }
+
+        .control-value {
+            font-size: 1.125rem;
+            font-weight: 600;
+            color: #f1f5f9;
+        }
+
+        .control-btn {
+            background: #3b82f6;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem 1.25rem;
+            font-size: 0.9rem;
+            font-weight: 500;
+            cursor: pointer;
+            text-decoration: none;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+
+        .control-btn:hover {
+            background: #2563eb;
+            transform: scale(1.02);
+        }
+
+        .control-btn:active {
+            transform: scale(0.98);
+        }
+
+        .timer-btn {
+            background: #f59e0b;
+        }
+
+        .timer-btn:hover {
+            background: #d97706;
+        }
+
+        .speed-off { color: #94a3b8; }
+        .speed-low { color: #10b981; }
+        .speed-med { color: #f59e0b; }
+        .speed-high { color: #ef4444; }
+
+        .timer-active { color: #f59e0b; }
+        .timer-inactive { color: #94a3b8; }
+
+        .refresh-row {
+            margin-top: auto;
+            padding-top: 1rem;
+        }
+
+        .refresh-btn {
+            background: #475569;
+            color: white;
+            border: none;
+            border-radius: 8px;
+            padding: 0.75rem;
+            width: 100%;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover {
+            background: #64748b;
+        }
+
+        .safety-timer {
+            border: 2px solid #f59e0b;
+            background: #451a03;
+        }
+
+        .safety-timer .control-value {
+            color: #fbbf24;
+        }
+
+        @media (max-width: 480px) {
+            .container {
+                padding: 0.75rem;
+            }
+
+            .control-row {
+                padding: 0.875rem;
+            }
+
+            .control-btn {
+                padding: 0.625rem 1rem;
+                font-size: 0.85rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🌀 Fan Remote</h1>
+        </div>
+
+        {% if mock_mode %}
+        <div class="status">
+            📱 Mock Mode - Development/Testing
+        </div>
+        {% endif %}
+
+        <!-- Speed Control -->
+        <div class="control-row">
+            <div class="control-info">
+                <div class="control-label">Fan Speed</div>
+                <div class="control-value speed-{{ current_state.speed }}">
+                    {% if current_state.speed == 'off' %}
+                        🛑 Off
+                    {% elif current_state.speed == 'low' %}
+                        🟢 Low
+                    {% elif current_state.speed == 'med' %}
+                        🟡 Medium
+                    {% elif current_state.speed == 'high' %}
+                        🔥 High
+                    {% endif %}
+                </div>
+            </div>
+            <a href="{{ url_for('cycle_speed_route') }}" class="control-btn">
+                Change Speed
+            </a>
+        </div>
+
+        <!-- Timer Control -->
+        <div class="control-row">
+            <div class="control-info">
+                <div class="control-label">Auto-Off Timer</div>
+                <div class="control-value {{ 'timer-active' if timer_state.active else 'timer-inactive' }}">
+                    {% if not timer_state.active %}
+                        🔘 Off
+                    {% else %}
+                        ⏱️ {{ timer_state.duration_hours }}h
+                        {% if timer_state.remaining_seconds > 0 %}
+                            <span style="font-size: 0.8rem; color: #94a3b8;">
+                                ({{ '%d:%02d' % ((timer_state.remaining_seconds // 3600), ((timer_state.remaining_seconds % 3600) // 60)) }} left)
+                            </span>
+                        {% endif %}
+                    {% endif %}
+                </div>
+            </div>
+            <a href="{{ url_for('cycle_timer_route') }}" class="control-btn timer-btn">
+                Change Timer
+            </a>
+        </div>
+
+        <!-- Safety Timer Display -->
+        {% if current_state.speed != 'off' and not timer_state.active %}
+        <div class="control-row safety-timer">
+            <div class="control-info">
+                <div class="control-label">Safety Timer</div>
+                {% if safety_timer_state.active %}
+                <div class="control-value timer-active">
+                    🛡️ {{ '%d:%02d' % ((safety_timer_state.remaining_seconds // 3600), ((safety_timer_state.remaining_seconds % 3600) // 60)) }} remaining
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        Auto-off after 6h continuous use
+                    </div>
+                </div>
+                {% else %}
+                <div class="control-value timer-inactive">
+                    🛡️ Starting...
+                    <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
+                        6 hour safety limit
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="refresh-row">
+            <button onclick="location.reload()" class="refresh-btn">
+                🔄 Refresh
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Function to update timer displays via API
+        function updateTimerDisplays() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    // Update auto-off timer display by finding elements with specific text content
+                    const controlRows = document.querySelectorAll('.control-row');
+                    let timerRow = null;
+
+                    // Find the timer control row
+                    for (const row of controlRows) {
+                        const label = row.querySelector('.control-label');
+                        if (label && label.textContent.includes('Auto-Off Timer')) {
+                            timerRow = row;
+                            break;
+                        }
+                    }
+
+                    if (timerRow) {
+                        const timerElement = timerRow.querySelector('.control-value');
+                        if (!data.timer_state.active) {
+                            timerElement.innerHTML = '🔘 Off';
+                            timerElement.className = 'control-value timer-inactive';
+                        } else {
+                            const hours = Math.floor(data.timer_state.remaining_seconds / 3600);
+                            const minutes = Math.floor((data.timer_state.remaining_seconds % 3600) / 60);
+                            const timeLeft = hours + ':' + minutes.toString().padStart(2, '0');
+
+                            timerElement.innerHTML = `⏱️ ${data.timer_state.duration_hours}h<span style="font-size: 0.8rem; color: #94a3b8;"> (${timeLeft} left)</span>`;
+                            timerElement.className = 'control-value timer-active';
+                        }
+                    }
+
+                    // Handle safety timer display
+                    let safetyTimerRow = document.querySelector('.safety-timer');
+
+                    if (data.current_state.speed !== 'off' && !data.timer_state.active) {
+                        // Show safety timer
+                        if (!safetyTimerRow && timerRow) {
+                            // Create safety timer row
+                            safetyTimerRow = document.createElement('div');
+                            safetyTimerRow.className = 'control-row safety-timer';
+                            safetyTimerRow.innerHTML = `
+                                <div class="control-info">
+                                    <div class="control-label">Safety Timer</div>
+                                    <div class="control-value timer-active safety-timer-value"></div>
+                                </div>
+                            `;
+                            timerRow.insertAdjacentElement('afterend', safetyTimerRow);
+                        }
+
+                        // Update safety timer content
+                        const safetyValueElement = document.querySelector('.safety-timer-value');
+                        if (safetyValueElement) {
+                            if (data.safety_timer_state.active && data.safety_timer_state.remaining_seconds > 0) {
+                                const hours = Math.floor(data.safety_timer_state.remaining_seconds / 3600);
+                                const minutes = Math.floor((data.safety_timer_state.remaining_seconds % 3600) / 60);
+                                const timeLeft = hours + ':' + minutes.toString().padStart(2, '0');
+
+                                safetyValueElement.innerHTML = `🛡️ ${timeLeft} remaining<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">Auto-off after 6h continuous use</div>`;
+                            } else {
+                                safetyValueElement.innerHTML = `🛡️ Starting...<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">6 hour safety limit</div>`;
+                            }
+                        }
+                    } else if (safetyTimerRow) {
+                        // Hide safety timer row
+                        safetyTimerRow.remove();
+                    }
+                })
+                .catch(error => {
+                    console.error('Error updating timer displays:', error);
+                });
+        }
+
+        // Check if we should start periodic updates
+        let shouldUpdate = {{ (timer_state.active or (safety_timer_state.active and current_state.speed != 'off'))|tojson }};
+
+        if (shouldUpdate) {
+            // Start periodic updates
+            const updateInterval = setInterval(updateTimerDisplays, 10000);
+
+            // Also update when page becomes visible (in case user switched tabs)
+            document.addEventListener('visibilitychange', function() {
+                if (!document.hidden) {
+                    updateTimerDisplays();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--primary-600) 0%, var(--primary-800) 50%, var(--neutral-800) 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: var(--neutral-800);
+            padding: 1rem;
+        }
+
+        .container {
+            background: white;
+            padding: 2.5rem;
+            border-radius: var(--radius-2xl);
+            box-shadow: var(--shadow-xl);
+            text-align: center;
+            max-width: 520px;
+            width: 100%;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            color: var(--neutral-900);
+            margin-bottom: 0.5rem;
+            font-size: 2.25rem;
+            font-weight: 700;
+            letter-spacing: -0.025em;
+            background: linear-gradient(135deg, var(--primary-600), var(--primary-800));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .mode-indicator {
+            background: var(--neutral-50);
+            color: var(--neutral-600);
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius-lg);
+            margin-bottom: 2rem;
+            font-size: 0.875rem;
+            font-weight: 500;
+            border: 1px solid var(--neutral-200);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .mock-mode {
+            background: #fef2f2;
+            color: var(--error-600);
+            border-color: #fecaca;
+        }
+
+        .status-section {
+            background: var(--neutral-50);
+            padding: 2rem;
+            border-radius: var(--radius-xl);
+            margin-bottom: 2rem;
+            border: 1px solid var(--neutral-200);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .status-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-500), var(--primary-600));
+        }
+
+        .current-speed {
+            font-size: 2rem;
+            font-weight: 800;
+            margin-bottom: 0.75rem;
+            color: var(--neutral-900);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.75rem;
+        }
+
+        .speed-off { color: var(--neutral-500); }
+        .speed-low { color: var(--success-600); }
+        .speed-med { color: var(--warning-600); }
+        .speed-high { color: var(--error-600); }
+
+        .last-changed {
+            color: var(--neutral-500);
+            font-size: 0.875rem;
+            font-weight: 500;
+        }
+
+        .controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .control-btn {
+            padding: 1rem 1.5rem;
+            border: none;
+            border-radius: var(--radius-lg);
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+        }
+
+        .control-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .control-btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-off {
+            background: linear-gradient(135deg, var(--neutral-500), var(--neutral-600));
+            grid-column: 1 / -1;
+        }
+
+        .btn-low {
+            background: linear-gradient(135deg, var(--success-500), var(--success-600));
+        }
+
+        .btn-med {
+            background: linear-gradient(135deg, var(--warning-500), var(--warning-600));
+        }
+
+        .btn-high {
+            background: linear-gradient(135deg, var(--error-500), var(--error-600));
+            grid-column: 1 / -1;
+        }
+
+        .control-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .control-btn:active {
+            transform: translateY(0);
+            box-shadow: var(--shadow-md);
+        }
+
+        .control-btn.active {
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(1px);
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, #4299e1, #3182ce);
+            color: white;
+            border: none;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.3s ease;
+        }
+
+        .refresh-btn:hover {
+            background: linear-gradient(135deg, #3182ce, #2c5282);
+            transform: translateY(-1px);
+        }
+
+        /* Cycle Controls */
+        .cycle-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            padding: 1.5rem;
+            background: var(--neutral-50);
+            border-radius: var(--radius-xl);
+            border: 2px solid var(--neutral-200);
+            transition: all 0.3s ease;
+        }
+
+        .cycle-control:hover {
+            border-color: var(--primary-300);
+            box-shadow: var(--shadow-md);
+        }
+
+        .current-state {
+            text-align: center;
+            width: 100%;
+        }
+
+        .current-state h4 {
+            margin: 0 0 0.5rem 0;
+            font-size: 0.875rem;
+            color: var(--neutral-600);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            font-weight: 600;
+        }
+
+        .state-display {
+            padding: 0.75rem 1.5rem;
+            border-radius: var(--radius-lg);
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+
+        .speed-display {
+            background: linear-gradient(135deg, var(--primary-100), var(--primary-50));
+            color: var(--primary-800);
+            border: 2px solid var(--primary-200);
+        }
+
+        .timer-display {
+            background: linear-gradient(135deg, var(--warning-100), var(--warning-50));
+            color: var(--warning-800);
+            border: 2px solid var(--warning-200);
+        }
+
+        .cycle-btn {
+            padding: 0.875rem 1.75rem;
+            background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+            color: white;
+            text-decoration: none;
+            border-radius: var(--radius-lg);
+            font-weight: 600;
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            box-shadow: var(--shadow-md);
+        }
+
+        .cycle-btn:hover {
+            background: linear-gradient(135deg, var(--primary-700), var(--primary-800));
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .cycle-speed-btn {
+            background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+        }
+
+        .cycle-timer-btn {
+            background: linear-gradient(135deg, var(--warning-600), var(--warning-700));
+        }
+
+        .cycle-timer-btn:hover {
+            background: linear-gradient(135deg, var(--warning-700), var(--warning-800));
+        }
+
+        .api-info {
+            background: var(--neutral-100);
+            padding: 1.5rem;
+            border-radius: var(--radius-lg);
+            margin-top: 2rem;
+            text-align: left;
+            font-size: 0.875rem;
+            color: var(--neutral-600);
+            border: 1px solid var(--neutral-200);
+        }
+
+        .api-info h4 {
+            margin-bottom: 1rem;
+            color: var(--neutral-900);
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .api-info code {
+            background: var(--neutral-200);
+            padding: 0.375rem 0.5rem;
+            border-radius: var(--radius-sm);
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--neutral-800);
+            border: 1px solid var(--neutral-300);
+        }
+
+        /* Timer Section Styles */
+        .timer-section {
+            background: var(--neutral-50);
+            padding: 2rem;
+            border-radius: var(--radius-xl);
+            margin-bottom: 2rem;
+            border: 1px solid var(--neutral-200);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .timer-section::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--warning-500), var(--warning-600));
+        }
+
+        .timer-section h3 {
+            color: var(--neutral-900);
+            margin-bottom: 1.5rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .timer-status {
+            margin-bottom: 1.5rem;
+            padding: 1.5rem;
+            background: var(--neutral-100);
+            border-radius: var(--radius-lg);
+            border: 1px solid var(--neutral-200);
+            transition: all 0.2s ease;
+        }
+
+        .timer-active {
+            background: #f0fdf4;
+            border: 1px solid #bbf7d0;
+            box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1);
+        }
+
+        .timer-countdown {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--success-700);
+            margin-bottom: 0.75rem;
+            font-family: 'SF Mono', 'Monaco', 'Inconsolata', 'Roboto Mono', monospace;
+        }
+
+        .timer-info {
+            font-size: 0.875rem;
+            color: var(--neutral-600);
+            font-weight: 500;
+        }
+
+        .timer-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+        }
+
+        .timer-btn {
+            padding: 1rem 1.25rem;
+            border: none;
+            border-radius: var(--radius-lg);
+            font-size: 0.875rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+            color: white;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--shadow-md);
+        }
+
+        .timer-btn::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .timer-btn:hover::before {
+            left: 100%;
+        }
+
+        .btn-timer-1 {
+            background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+        }
+
+        .btn-timer-2 {
+            background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+        }
+
+        .btn-timer-4 {
+            background: linear-gradient(135deg, var(--primary-700), var(--primary-800));
+        }
+
+        .btn-timer-off {
+            background: linear-gradient(135deg, var(--error-500), var(--error-600));
+            grid-column: 1 / -1;
+        }
+
+        .timer-btn:hover {
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        .timer-btn:active {
+            transform: translateY(0);
+            box-shadow: var(--shadow-md);
+        }
+
+        .timer-btn.active {
+            box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
+            transform: translateY(1px);
+        }
+
+        .refresh-btn {
+            background: linear-gradient(135deg, var(--primary-500), var(--primary-600));
+            color: white;
+            border: none;
+            padding: 1rem 1.5rem;
+            border-radius: var(--radius-lg);
+            cursor: pointer;
+            font-size: 0.875rem;
+            font-weight: 600;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: var(--shadow-md);
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .refresh-btn:hover {
+            background: linear-gradient(135deg, var(--primary-600), var(--primary-700));
+            transform: translateY(-1px);
+            box-shadow: var(--shadow-lg);
+        }
+
+        @media (max-width: 640px) {
+            .container {
+                padding: 1.5rem;
+                margin: 0.5rem;
+                max-width: 100%;
+            }
+
+            h1 {
+                font-size: 1.875rem;
+            }
+
+            .status-section, .timer-section {
+                padding: 1.5rem;
+            }
+
+            .current-speed {
+                font-size: 1.5rem;
+                flex-direction: column;
+                gap: 0.5rem;
+            }
+
+            .cycle-control {
+                padding: 1rem;
+            }
+
+            .cycle-btn {
+                padding: 0.75rem 1.5rem;
+                font-size: 0.875rem;
+            }
+
+            .state-display {
+                font-size: 1rem;
+                padding: 0.625rem 1.25rem;
+            }
+
+            .timer-countdown {
+                font-size: 1.5rem;
+            }
+
+            .controls {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .btn-off, .btn-high {
+                grid-column: 1;
+            }
+
+            .timer-controls {
+                grid-template-columns: 1fr;
+                gap: 0.75rem;
+            }
+
+            .btn-timer-off {
+                grid-column: 1;
+            }
+
+            .control-btn, .timer-btn {
+                padding: 1rem;
+                font-size: 0.875rem;
+            }
+
+            .api-info {
+                padding: 1rem;
+                font-size: 0.75rem;
+            }
+
+            .api-info code {
+                font-size: 0.625rem;
+                padding: 0.25rem 0.375rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🌀 Fan Control</h1>
+
+        <div class="mode-indicator {{ 'mock-mode' if mock_mode else '' }}">
+            {% if mock_mode %}
+                🖥️ Development Mode (Mock GPIO)
+            {% else %}
+                🔧 Hardware Mode (Raspberry Pi GPIO)
+            {% endif %}
+        </div>
+
+        <div class="status-section">
+            <div class="current-speed speed-{{ current_state.speed }}">
+                Current Speed: {{ current_state.speed.upper() }}
+                {% if current_state.speed == 'off' %}🔴
+                {% elif current_state.speed == 'low' %}🟢
+                {% elif current_state.speed == 'med' %}🟡
+                {% elif current_state.speed == 'high' %}🔴
+                {% endif %}
+            </div>
+            <div class="last-changed">
+                Last changed: {{ current_state.last_changed }}
+            </div>
+        </div>
+
+        <!-- Timer Section -->
+        <div class="timer-section">
+            <h3>⏱️ Auto-Off Timer</h3>
+
+            <div class="timer-status {{ 'timer-active' if timer_state.active else '' }}">
+                {% if timer_state.active %}
+                    <div class="timer-countdown" id="countdown">
+                        <span id="time-remaining">{{ timer_state.remaining_seconds }}</span>
+                    </div>
+                    <div class="timer-info">
+                        Timer: {{ timer_state.duration_hours }} hour{{ 's' if timer_state.duration_hours != 1 else '' }}
+                        • Fan will auto-stop when timer expires
+                    </div>
+                {% else %}
+                    <div class="timer-info">
+                        🔘 No timer active • Fan will run until manually stopped
+                    </div>
+                {% endif %}
+            </div>
+
+            <div class="timer-controls">
+                <div class="cycle-control">
+                    <div class="current-state">
+                        <h4>Current Timer:</h4>
+                        <div class="state-display timer-display">
+                            {% if not timer_state.active %}
+                                🔘 Off
+                            {% else %}
+                                ⏱️ {{ timer_state.duration_hours }} Hour{{ 's' if timer_state.duration_hours != 1 else '' }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <a href="{{ url_for('cycle_timer_route') }}" class="cycle-btn cycle-timer-btn">
+                        🔄 Cycle Timer
+                    </a>
+                </div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="cycle-control">
+                <div class="current-state">
+                    <h4>Current Speed:</h4>
+                    <div class="state-display speed-display">
+                        {% if current_state.speed == 'off' %}
+                            🛑 Off
+                        {% elif current_state.speed == 'low' %}
+                            🟢 Low
+                        {% elif current_state.speed == 'med' %}
+                            🟡 Medium
+                        {% elif current_state.speed == 'high' %}
+                            � High
+                        {% endif %}
+                    </div>
+                </div>
+                <a href="{{ url_for('cycle_speed_route') }}" class="cycle-btn cycle-speed-btn">
+                    🔄 Cycle Speed
+                </a>
+            </div>
+        </div>
+
+        <button onclick="location.reload()" class="refresh-btn">
+            🔄 Refresh Status
+        </button>
+
+        <div class="api-info">
+            <h4>🔌 API Endpoints:</h4>
+            <div><strong>Status:</strong> <code>GET /api/status</code></div>
+            <div><strong>Control:</strong> <code>POST /api/set_speed</code></div>
+            <div><strong>Timer:</strong> <code>POST /api/set_timer</code></div>
+            <div style="margin-top: 0.5rem;">
+                <strong>Examples:</strong><br>
+                <code>curl -X POST -H "Content-Type: application/json" -d '{"speed":"high"}' http://localhost:5001/api/set_speed</code><br>
+                <code>curl -X POST -H "Content-Type: application/json" -d '{"hours":2}' http://localhost:5001/api/set_timer</code>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Timer state from server
+        let timerActive = {{ timer_state.active|tojson }};
+        let remainingSeconds = {{ timer_state.remaining_seconds }};
+
+        // Format time as HH:MM:SS
+        function formatTime(seconds) {
+            const hours = Math.floor(seconds / 3600);
+            const minutes = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        }
+
+        // Update countdown display
+        function updateCountdown() {
+            const timeElement = document.getElementById('time-remaining');
+            if (timeElement && timerActive && remainingSeconds > 0) {
+                timeElement.textContent = formatTime(remainingSeconds);
+                remainingSeconds--;
+
+                // If timer expired, reload page to show updated state
+                if (remainingSeconds < 0) {
+                    location.reload();
+                }
+            }
+        }
+
+        // Start countdown if timer is active
+        if (timerActive && remainingSeconds > 0) {
+            // Update every second
+            setInterval(updateCountdown, 1000);
+            // Initial update
+            updateCountdown();
+        }
+
+        // Auto-refresh every 30 seconds (reduced from previous to account for countdown)
+        setTimeout(function() {
+            location.reload();
+        }, 30000);
+
+        // Add visual feedback for button clicks
+        document.querySelectorAll('.control-btn, .timer-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                this.style.transform = 'translateY(2px)';
+                setTimeout(() => {
+                    this.style.transform = '';
+                }, 150);
+            });
+        });
+
+        // Refresh status every 10 seconds to stay in sync
+        setInterval(async function() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+
+                // Update timer state if changed
+                if (data.timer_state.active !== timerActive ||
+                    Math.abs(data.timer_state.remaining_seconds - remainingSeconds) > 2) {
+                    location.reload(); // Reload if significant change
+                }
+            } catch (error) {
+                console.log('Status check failed:', error);
+            }
+        }, 10000);
+    </script>
+</body>
+</html>
