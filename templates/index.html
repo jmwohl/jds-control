@@ -197,11 +197,13 @@
         </div>
 
         <!-- Timer Control -->
-        <div class="control-row">
+        <div class="control-row {{ 'disabled' if current_state.speed == 'off' else '' }}">
             <div class="control-info">
                 <div class="control-label">Auto-Off Timer</div>
                 <div class="control-value {{ 'timer-active' if timer_state.active else 'timer-inactive' }}">
-                    {% if not timer_state.active %}
+                    {% if current_state.speed == 'off' %}
+                        🔘 Disabled (fan off)
+                    {% elif not timer_state.active %}
                         🔘 Off
                     {% else %}
                         ⏱️ {{ timer_state.duration_hours }}h
@@ -213,9 +215,15 @@
                     {% endif %}
                 </div>
             </div>
-            <a href="{{ url_for('cycle_timer_route') }}" class="control-btn timer-btn">
-                Change Timer
-            </a>
+            {% if current_state.speed == 'off' %}
+                <span class="control-btn timer-btn disabled">
+                    Timer
+                </span>
+            {% else %}
+                <a href="{{ url_for('cycle_timer_route') }}" class="control-btn timer-btn">
+                    Timer
+                </a>
+            {% endif %}
         </div>
 
         <!-- Safety Timer Display -->
@@ -224,14 +232,14 @@
             <div class="control-info">
                 <div class="control-label">Safety Timer</div>
                 {% if safety_timer_state.active %}
-                <div class="control-value timer-active">
+                <div class="control-value timer-active safety-timer-value">
                     🛡️ {{ '%d:%02d' % ((safety_timer_state.remaining_seconds // 3600), ((safety_timer_state.remaining_seconds % 3600) // 60)) }} remaining
                     <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
                         Auto-off after 6h continuous use
                     </div>
                 </div>
                 {% else %}
-                <div class="control-value timer-inactive">
+                <div class="control-value timer-inactive safety-timer-value">
                     🛡️ Starting...
                     <div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">
                         6 hour safety limit
@@ -250,36 +258,75 @@
     </div>
 
     <script>
-        // Function to update timer displays via API
-        function updateTimerDisplays() {
-            fetch('/api/status')
-                .then(response => response.json())
-                .then(data => {
-                    // Update auto-off timer display by finding elements with specific text content
+        // Function to update displays with provided data
+        function updateTimerDisplaysWithData(data) {
+                    // Update fan speed display
                     const controlRows = document.querySelectorAll('.control-row');
+                    let speedRow = null;
                     let timerRow = null;
 
-                    // Find the timer control row
+                    // Find both speed and timer control rows
                     for (const row of controlRows) {
                         const label = row.querySelector('.control-label');
-                        if (label && label.textContent.includes('Auto-Off Timer')) {
+                        if (label && label.textContent.includes('Fan Speed')) {
+                            speedRow = row;
+                        } else if (label && label.textContent.includes('Auto-Off Timer')) {
                             timerRow = row;
-                            break;
                         }
                     }
 
-                    if (timerRow) {
+                    // Update fan speed display
+                    if (speedRow) {
+                        const speedElement = speedRow.querySelector('.control-value');
+                        const speedIcons = {
+                            'off': '🛑 Off',
+                            'low': '🟢 Low',
+                            'med': '🟡 Medium',
+                            'high': '🔥 High'
+                        };
+                        speedElement.innerHTML = speedIcons[data.current_state.speed] || '❓ Unknown';
+                        speedElement.className = `control-value speed-${data.current_state.speed}`;
+                    }                    if (timerRow) {
                         const timerElement = timerRow.querySelector('.control-value');
-                        if (!data.timer_state.active) {
-                            timerElement.innerHTML = '🔘 Off';
-                            timerElement.className = 'control-value timer-inactive';
-                        } else {
-                            const hours = Math.floor(data.timer_state.remaining_seconds / 3600);
-                            const minutes = Math.floor((data.timer_state.remaining_seconds % 3600) / 60);
-                            const timeLeft = hours + ':' + minutes.toString().padStart(2, '0');
+                        const timerButton = timerRow.querySelector('.control-btn, .timer-btn');
 
-                            timerElement.innerHTML = `⏱️ ${data.timer_state.duration_hours}h<span style="font-size: 0.8rem; color: #94a3b8;"> (${timeLeft} left)</span>`;
-                            timerElement.className = 'control-value timer-active';
+                        // Handle disabled state when fan is off
+                        if (data.current_state.speed === 'off') {
+                            timerRow.classList.add('disabled');
+                            timerElement.innerHTML = '🔘 Disabled (fan off)';
+                            timerElement.className = 'control-value timer-inactive';
+
+                            // Update button to disabled state if needed
+                            if (timerButton && timerButton.tagName === 'A') {
+                                const newButton = document.createElement('span');
+                                newButton.className = 'control-btn timer-btn disabled';
+                                newButton.textContent = 'Timer';
+                                timerButton.parentNode.replaceChild(newButton, timerButton);
+                            }
+                        } else {
+                            timerRow.classList.remove('disabled');
+
+                            // Update button to enabled state if needed
+                            if (timerButton && timerButton.tagName === 'SPAN') {
+                                const newButton = document.createElement('a');
+                                newButton.className = 'control-btn timer-btn';
+                                newButton.href = '/cycle_timer';
+                                newButton.textContent = 'Timer';
+                                timerButton.parentNode.replaceChild(newButton, timerButton);
+                            }
+
+                            // Update timer display for active fan
+                            if (!data.timer_state.active) {
+                                timerElement.innerHTML = '🔘 Off';
+                                timerElement.className = 'control-value timer-inactive';
+                            } else {
+                                const hours = Math.floor(data.timer_state.remaining_seconds / 3600);
+                                const minutes = Math.floor((data.timer_state.remaining_seconds % 3600) / 60);
+                                const timeLeft = hours + ':' + minutes.toString().padStart(2, '0');
+
+                                timerElement.innerHTML = `⏱️ ${data.timer_state.duration_hours}h<span style="font-size: 0.8rem; color: #94a3b8;"> (${timeLeft} left)</span>`;
+                                timerElement.className = 'control-value timer-active';
+                            }
                         }
                     }
 
@@ -304,40 +351,101 @@
                         // Update safety timer content
                         const safetyValueElement = document.querySelector('.safety-timer-value');
                         if (safetyValueElement) {
+                            console.log('Safety timer data:', data.safety_timer_state);
                             if (data.safety_timer_state.active && data.safety_timer_state.remaining_seconds > 0) {
                                 const hours = Math.floor(data.safety_timer_state.remaining_seconds / 3600);
                                 const minutes = Math.floor((data.safety_timer_state.remaining_seconds % 3600) / 60);
                                 const timeLeft = hours + ':' + minutes.toString().padStart(2, '0');
 
+                                console.log('Updating safety timer display to:', timeLeft);
                                 safetyValueElement.innerHTML = `🛡️ ${timeLeft} remaining<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">Auto-off after 6h continuous use</div>`;
                             } else {
+                                console.log('Safety timer not active or no remaining time');
                                 safetyValueElement.innerHTML = `🛡️ Starting...<div style="font-size: 0.75rem; color: #94a3b8; margin-top: 0.25rem;">6 hour safety limit</div>`;
                             }
+                        } else {
+                            console.log('Safety timer element not found');
                         }
                     } else if (safetyTimerRow) {
                         // Hide safety timer row
                         safetyTimerRow.remove();
                     }
-                })
+        }
+
+        // Wrapper function to fetch data and call update function
+        function updateTimerDisplays() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => updateTimerDisplaysWithData(data))
                 .catch(error => {
                     console.error('Error updating timer displays:', error);
                 });
         }
 
         // Check if we should start periodic updates
-        let shouldUpdate = {{ (timer_state.active or (safety_timer_state.active and current_state.speed != 'off'))|tojson }};
+        // Enhanced real-time update system for GPIO button changes
+        let lastKnownState = {
+            speed: '{{ current_state.speed }}',
+            timer_active: {{ timer_state.active|tojson }},
+            safety_timer_active: {{ safety_timer_state.active|tojson }}
+        };
 
-        if (shouldUpdate) {
-            // Start periodic updates
-            const updateInterval = setInterval(updateTimerDisplays, 10000);
-
-            // Also update when page becomes visible (in case user switched tabs)
-            document.addEventListener('visibilitychange', function() {
-                if (!document.hidden) {
-                    updateTimerDisplays();
-                }
-            });
+        // Add visual indicator for updates
+        function showUpdateIndicator() {
+            const indicator = document.createElement('div');
+            indicator.id = 'update-indicator';
+            indicator.innerHTML = '🔄';
+            indicator.style.cssText = 'position:fixed;top:10px;right:10px;background:rgba(0,0,0,0.7);color:white;padding:5px 10px;border-radius:15px;font-size:12px;z-index:1000;';
+            document.body.appendChild(indicator);
+            setTimeout(() => indicator.remove(), 1000);
         }
+
+        // Comprehensive status update function
+        function updateFullStatus() {
+            fetch('/api/status')
+                .then(response => response.json())
+                .then(data => {
+                    let needsRefresh = false;
+
+                    // Check for speed changes (from GPIO buttons)
+                    if (data.current_state.speed !== lastKnownState.speed) {
+                        needsRefresh = true;
+                        lastKnownState.speed = data.current_state.speed;
+                    }
+
+                    // Check for timer state changes
+                    if (data.timer_state.active !== lastKnownState.timer_active ||
+                        data.safety_timer_state.active !== lastKnownState.safety_timer_active) {
+                        needsRefresh = true;
+                        lastKnownState.timer_active = data.timer_state.active;
+                        lastKnownState.safety_timer_active = data.safety_timer_state.active;
+                    }
+
+                    // Always update timer displays with the current data (for countdown updates)
+                    updateTimerDisplaysWithData(data);
+
+                    // If major state change detected, show indicator and refresh page after a delay
+                    if (needsRefresh) {
+                        console.log('State change detected, refreshing interface');
+                        showUpdateIndicator();
+                        setTimeout(() => location.reload(), 500);
+                        return;
+                    }
+                })
+                .catch(error => {
+                    console.error('Status update failed:', error);
+                });
+        }
+
+        // Start real-time polling (every 2 seconds for better responsiveness)
+        const realtimeInterval = setInterval(updateFullStatus, 2000);
+
+        // Also update immediately when page becomes visible
+        document.addEventListener('visibilitychange', function() {
+            if (!document.hidden) {
+                updateFullStatus();
+            }
+        });
     </script>
 </body>
 </html>
@@ -511,6 +619,22 @@
         .control-btn.active {
             box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.15);
             transform: translateY(1px);
+        }
+
+        /* Disabled state styles */
+        .control-row.disabled {
+            opacity: 0.6;
+        }
+
+        .control-btn.disabled {
+            background: var(--neutral-600);
+            color: var(--neutral-400);
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .control-row.disabled .control-value {
+            color: var(--neutral-500);
         }
 
         .refresh-btn {
@@ -983,45 +1107,6 @@
     </div>
 
     <script>
-        // Timer state from server
-        let timerActive = {{ timer_state.active|tojson }};
-        let remainingSeconds = {{ timer_state.remaining_seconds }};
-
-        // Format time as HH:MM:SS
-        function formatTime(seconds) {
-            const hours = Math.floor(seconds / 3600);
-            const minutes = Math.floor((seconds % 3600) / 60);
-            const secs = seconds % 60;
-            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
-        }
-
-        // Update countdown display
-        function updateCountdown() {
-            const timeElement = document.getElementById('time-remaining');
-            if (timeElement && timerActive && remainingSeconds > 0) {
-                timeElement.textContent = formatTime(remainingSeconds);
-                remainingSeconds--;
-
-                // If timer expired, reload page to show updated state
-                if (remainingSeconds < 0) {
-                    location.reload();
-                }
-            }
-        }
-
-        // Start countdown if timer is active
-        if (timerActive && remainingSeconds > 0) {
-            // Update every second
-            setInterval(updateCountdown, 1000);
-            // Initial update
-            updateCountdown();
-        }
-
-        // Auto-refresh every 30 seconds (reduced from previous to account for countdown)
-        setTimeout(function() {
-            location.reload();
-        }, 30000);
-
         // Add visual feedback for button clicks
         document.querySelectorAll('.control-btn, .timer-btn').forEach(btn => {
             btn.addEventListener('click', function() {
@@ -1031,22 +1116,6 @@
                 }, 150);
             });
         });
-
-        // Refresh status every 10 seconds to stay in sync
-        setInterval(async function() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-
-                // Update timer state if changed
-                if (data.timer_state.active !== timerActive ||
-                    Math.abs(data.timer_state.remaining_seconds - remainingSeconds) > 2) {
-                    location.reload(); // Reload if significant change
-                }
-            } catch (error) {
-                console.log('Status check failed:', error);
-            }
-        }, 10000);
     </script>
 </body>
 </html>
