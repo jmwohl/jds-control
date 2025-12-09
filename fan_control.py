@@ -131,16 +131,9 @@ def register_timer_change_callback(callback_func):
 
 def speed_button_callback(pin):
     """Handle speed button press - cycles through off, low, med, high"""
-    global current_speed_index, last_speed_press
+    global current_speed_index
 
     print(f"[DEBUG] speed_button_callback() called on pin {pin}")
-
-    current_time = time.time()
-    if current_time - last_speed_press < DEBOUNCE_TIME:
-        print(f"[DEBUG] Button press ignored - too soon (debounce)")
-        return  # Ignore rapid presses
-
-    last_speed_press = current_time
 
     # Cycle to next speed
     current_speed_index = (current_speed_index + 1) % len(speed_states)
@@ -164,16 +157,9 @@ def speed_button_callback(pin):
 
 def timer_button_callback(pin):
     """Handle timer button press - cycles through off, 1hr, 2hr, 4hr"""
-    global current_timer_index, last_timer_press
+    global current_timer_index
 
     print(f"[DEBUG] timer_button_callback() called on pin {pin}")
-
-    current_time = time.time()
-    if current_time - last_timer_press < DEBOUNCE_TIME:
-        print(f"[DEBUG] Timer button press ignored - too soon (debounce)")
-        return  # Ignore rapid presses
-
-    last_timer_press = current_time
 
     # Cycle to next timer setting
     current_timer_index = (current_timer_index + 1) % len(timer_states)
