@@ -21,6 +21,12 @@ TIMER_BUTTON_GPIO = 19  # Timer cycling button
 
 def test_button_hardware():
     """Test button hardware directly"""
+    # Clean up any existing GPIO state first
+    try:
+        GPIO.cleanup()
+    except:
+        pass  # Ignore cleanup errors if GPIO wasn't initialized
+
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
 
@@ -54,6 +60,12 @@ def test_button_hardware():
 
 def test_button_events():
     """Test button event detection"""
+    # Clean up any existing GPIO state first
+    try:
+        GPIO.cleanup()
+    except:
+        pass  # Ignore cleanup errors if GPIO wasn't initialized
+
     GPIO.setmode(GPIO.BCM)
     GPIO.setwarnings(False)
 
@@ -69,10 +81,23 @@ def test_button_events():
         print(f"TIMER BUTTON PRESSED! (GPIO {pin})")
 
     # Add event detection
-    GPIO.add_event_detect(SPEED_BUTTON_GPIO, GPIO.FALLING,
-                         callback=speed_pressed, bouncetime=200)
-    GPIO.add_event_detect(TIMER_BUTTON_GPIO, GPIO.FALLING,
-                         callback=timer_pressed, bouncetime=200)
+    try:
+        GPIO.add_event_detect(SPEED_BUTTON_GPIO, GPIO.FALLING,
+                             callback=speed_pressed, bouncetime=200)
+        print(f"✓ Speed button event detection added (GPIO {SPEED_BUTTON_GPIO})")
+    except RuntimeError as e:
+        print(f"✗ Failed to add speed button event detection: {e}")
+        GPIO.cleanup()
+        return
+
+    try:
+        GPIO.add_event_detect(TIMER_BUTTON_GPIO, GPIO.FALLING,
+                             callback=timer_pressed, bouncetime=200)
+        print(f"✓ Timer button event detection added (GPIO {TIMER_BUTTON_GPIO})")
+    except RuntimeError as e:
+        print(f"✗ Failed to add timer button event detection: {e}")
+        GPIO.cleanup()
+        return
 
     print("=== Button Event Detection Test ===")
     print("Waiting for button presses...")
