@@ -25,19 +25,30 @@ All files should be in the same directory.
 
 ### 2. Install Dependencies
 
-#### On macOS/Linux (Development):
+#### Method 1: Auto-Detection (Recommended)
+The startup script automatically detects your platform:
+
 ```bash
 # Create virtual environment
 python3 -m venv venv
 
-# Activate virtual environment
-source venv/bin/activate
-
-# Install dependencies
-pip install -r requirements.txt
+# The startup script will auto-install the correct requirements
+./start_web.sh
 ```
 
-#### On Raspberry Pi:
+#### Method 2: Manual Installation
+
+**On macOS/Linux (Development):**
+```bash
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate
+
+# Install development dependencies (no GPIO)
+pip install -r requirements-dev.txt
+```
+
+**On Raspberry Pi:**
 ```bash
 # Install system packages
 sudo apt update
@@ -45,11 +56,15 @@ sudo apt install python3-pip python3-venv
 
 # Create virtual environment
 python3 -m venv venv
-
-# Activate virtual environment
 source venv/bin/activate
 
-# Install dependencies
+# Install Raspberry Pi dependencies (includes GPIO)
+pip install -r requirements-rpi.txt
+```
+
+#### Method 3: Universal Requirements
+```bash
+# This works on both platforms (uses environment markers)
 pip install -r requirements.txt
 ```
 

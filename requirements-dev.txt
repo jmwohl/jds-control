@@ -1,0 +1,2 @@
+# Requirements for development (Mac/Linux without GPIO)
+-r requirements-base.txt
