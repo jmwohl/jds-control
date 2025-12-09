@@ -108,6 +108,20 @@ last_speed_press = 0
 last_timer_press = 0
 DEBOUNCE_TIME = 0.5  # 500ms debounce
 
+# Callback hooks for external integration (e.g., web app)
+speed_change_callback = None
+timer_change_callback = None
+
+def register_speed_change_callback(callback_func):
+    """Register a callback function to be called when speed changes via button"""
+    global speed_change_callback
+    speed_change_callback = callback_func
+
+def register_timer_change_callback(callback_func):
+    """Register a callback function to be called when timer changes via button"""
+    global timer_change_callback
+    timer_change_callback = callback_func
+
 
 def speed_button_callback(pin):
     """Handle speed button press - cycles through off, low, med, high"""
@@ -124,7 +138,18 @@ def speed_button_callback(pin):
     new_speed = speed_states[current_speed_index]
 
     print(f"Speed button pressed: Setting fan to {new_speed}")
-    set_speed(new_speed)
+
+    # If there's a callback registered (e.g., from web app), use it
+    if speed_change_callback:
+        try:
+            speed_change_callback(new_speed)
+        except Exception as e:
+            print(f"Error in speed change callback: {e}")
+            # Fall back to direct control if callback fails
+            set_speed(new_speed)
+    else:
+        # No callback registered, use direct control
+        set_speed(new_speed)
 
 
 def timer_button_callback(pin):
@@ -143,12 +168,18 @@ def timer_button_callback(pin):
 
     print(f"Timer button pressed: Setting timer to {new_timer}")
 
-    # For now, just print the timer selection
-    # The actual timer functionality will be handled by the web app
-    if new_timer == 'off':
-        print("Timer disabled")
+    # If there's a callback registered (e.g., from web app), use it
+    if timer_change_callback:
+        try:
+            timer_change_callback(new_timer)
+        except Exception as e:
+            print(f"Error in timer change callback: {e}")
     else:
-        print(f"Timer set to {new_timer} (web app will handle actual timing)")
+        # No callback registered, just print
+        if new_timer == 'off':
+            print("Timer disabled")
+        else:
+            print(f"Timer set to {new_timer} (web app will handle actual timing)")
 
 
 def setup_buttons():

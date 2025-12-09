@@ -46,6 +46,10 @@ timer_thread = None
 safety_timer_thread = None
 
 
+# === BUTTON INTEGRATION ===
+# Button callbacks will be registered after all functions are defined
+
+
 @app.route('/')
 def index():
     """Main control interface."""
@@ -434,6 +438,45 @@ def timer_worker():
             timer_expired()
             break
         time.sleep(1)  # Check every second
+
+
+# === BUTTON INTEGRATION CALLBACKS ===
+
+def handle_button_speed_change(new_speed):
+    """Callback function for hardware button speed changes"""
+    print(f"Hardware button changed speed to: {new_speed}")
+
+    # Use the same change_fan_speed function that the web interface uses
+    success, message = change_fan_speed(new_speed)
+    if success:
+        print(f"Speed changed via button: {message}")
+    else:
+        print(f"Error changing speed via button: {message}")
+
+
+def handle_button_timer_change(new_timer):
+    """Callback function for hardware button timer changes"""
+    print(f"Hardware button changed timer to: {new_timer}")
+
+    if new_timer == 'off':
+        cancel_timer()
+        print("Timer cancelled via button")
+    else:
+        # Convert timer state to hours
+        timer_hours = {'1hr': 1, '2hr': 2, '4hr': 4}.get(new_timer, 0)
+        if timer_hours > 0:
+            success, message = set_timer(timer_hours)
+            if success:
+                print(f"Timer set via button: {message}")
+            else:
+                print(f"Error setting timer via button: {message}")
+
+
+# Register the callback functions with fan_control
+fan_control.register_speed_change_callback(handle_button_speed_change)
+fan_control.register_timer_change_callback(handle_button_timer_change)
+
+print("✓ Hardware button callbacks registered")
 
 
 if __name__ == '__main__':
