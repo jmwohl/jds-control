@@ -133,8 +133,11 @@ def speed_button_callback(pin):
     """Handle speed button press - cycles through off, low, med, high"""
     global current_speed_index, last_speed_press
 
+    print(f"[DEBUG] speed_button_callback() called on pin {pin}")
+
     current_time = time.time()
     if current_time - last_speed_press < DEBOUNCE_TIME:
+        print(f"[DEBUG] Button press ignored - too soon (debounce)")
         return  # Ignore rapid presses
 
     last_speed_press = current_time
@@ -147,6 +150,7 @@ def speed_button_callback(pin):
 
     # If there's a callback registered (e.g., from web app), use it
     if speed_change_callback:
+        print(f"[DEBUG] Calling web app callback for speed change")
         try:
             speed_change_callback(new_speed)
         except Exception as e:
@@ -162,8 +166,11 @@ def timer_button_callback(pin):
     """Handle timer button press - cycles through off, 1hr, 2hr, 4hr"""
     global current_timer_index, last_timer_press
 
+    print(f"[DEBUG] timer_button_callback() called on pin {pin}")
+
     current_time = time.time()
     if current_time - last_timer_press < DEBOUNCE_TIME:
+        print(f"[DEBUG] Timer button press ignored - too soon (debounce)")
         return  # Ignore rapid presses
 
     last_timer_press = current_time
@@ -218,10 +225,26 @@ def poll_buttons():
     """Poll buttons for state changes"""
     global last_speed_state, last_timer_state, last_speed_press, last_timer_press
 
+    poll_count = 0
+    debug_counter = 0
+
+    print(f"[DEBUG] Polling thread started. MOCK_MODE={MOCK_MODE}")
+
     while button_thread_running:
         try:
             if not MOCK_MODE:
                 current_time = time.time()
+                poll_count += 1
+
+                # Debug output every 50 polls (5 seconds at 100ms intervals)
+                debug_counter += 1
+                if debug_counter >= 50:
+                    debug_counter = 0
+                    speed_state = GPIO.input(SPEED_BUTTON_GPIO)
+                    timer_state = GPIO.input(TIMER_BUTTON_GPIO)
+                    speed_text = "HIGH" if speed_state else "LOW"
+                    timer_text = "HIGH" if timer_state else "LOW"
+                    print(f"[DEBUG] Poll #{poll_count}: Speed={speed_text}, Timer={timer_text}")
 
                 # Check speed button
                 speed_state = GPIO.input(SPEED_BUTTON_GPIO)
@@ -229,6 +252,7 @@ def poll_buttons():
                     speed_state == GPIO.LOW and
                     current_time - last_speed_press > DEBOUNCE_TIME):
 
+                    print(f"[DEBUG] Speed button press detected! {last_speed_state} -> {speed_state}")
                     last_speed_press = current_time
                     # Call the callback in a separate thread to avoid blocking
                     import threading
@@ -242,12 +266,16 @@ def poll_buttons():
                     timer_state == GPIO.LOW and
                     current_time - last_timer_press > DEBOUNCE_TIME):
 
+                    print(f"[DEBUG] Timer button press detected! {last_timer_state} -> {timer_state}")
                     last_timer_press = current_time
                     # Call the callback in a separate thread to avoid blocking
                     import threading
                     threading.Thread(target=timer_button_callback, args=(TIMER_BUTTON_GPIO,), daemon=True).start()
 
                 last_timer_state = timer_state
+            else:
+                print(f"[DEBUG] In mock mode - polling disabled")
+                time.sleep(5)  # Sleep longer in mock mode
 
             time.sleep(0.1)  # Poll every 100ms
 
