@@ -112,6 +112,12 @@ DEBOUNCE_TIME = 0.5  # 500ms debounce
 speed_change_callback = None
 timer_change_callback = None
 
+# Button polling thread variables
+button_thread = None
+button_thread_running = False
+last_speed_state = None
+last_timer_state = None
+
 def register_speed_change_callback(callback_func):
     """Register a callback function to be called when speed changes via button"""
     global speed_change_callback
@@ -182,39 +188,145 @@ def timer_button_callback(pin):
             print(f"Timer set to {new_timer} (web app will handle actual timing)")
 
 
+def start_button_polling():
+    """Start polling thread for button presses when edge detection fails"""
+    global button_thread, button_thread_running, last_speed_state, last_timer_state
+
+    if button_thread_running:
+        return
+
+    # Initialize button states
+    if not MOCK_MODE:
+        last_speed_state = GPIO.input(SPEED_BUTTON_GPIO)
+        last_timer_state = GPIO.input(TIMER_BUTTON_GPIO)
+    else:
+        last_speed_state = GPIO.HIGH
+        last_timer_state = GPIO.HIGH
+
+    button_thread_running = True
+
+    import threading
+    button_thread = threading.Thread(target=poll_buttons, daemon=True)
+    button_thread.start()
+
+    print("✓ Button polling started (fallback method)")
+    print(f"Speed button on pin {SPEED_BUTTON_GPIO} (polling)")
+    print(f"Timer button on pin {TIMER_BUTTON_GPIO} (polling)")
+
+
+def poll_buttons():
+    """Poll buttons for state changes"""
+    global last_speed_state, last_timer_state, last_speed_press, last_timer_press
+
+    while button_thread_running:
+        try:
+            if not MOCK_MODE:
+                current_time = time.time()
+
+                # Check speed button
+                speed_state = GPIO.input(SPEED_BUTTON_GPIO)
+                if (last_speed_state == GPIO.HIGH and
+                    speed_state == GPIO.LOW and
+                    current_time - last_speed_press > DEBOUNCE_TIME):
+
+                    last_speed_press = current_time
+                    # Call the callback in a separate thread to avoid blocking
+                    import threading
+                    threading.Thread(target=speed_button_callback, args=(SPEED_BUTTON_GPIO,), daemon=True).start()
+
+                last_speed_state = speed_state
+
+                # Check timer button
+                timer_state = GPIO.input(TIMER_BUTTON_GPIO)
+                if (last_timer_state == GPIO.HIGH and
+                    timer_state == GPIO.LOW and
+                    current_time - last_timer_press > DEBOUNCE_TIME):
+
+                    last_timer_press = current_time
+                    # Call the callback in a separate thread to avoid blocking
+                    import threading
+                    threading.Thread(target=timer_button_callback, args=(TIMER_BUTTON_GPIO,), daemon=True).start()
+
+                last_timer_state = timer_state
+
+            time.sleep(0.1)  # Poll every 100ms
+
+        except Exception as e:
+            print(f"Error in button polling: {e}")
+            time.sleep(1)  # Wait longer on error
+
+
+def stop_button_polling():
+    """Stop button polling thread"""
+    global button_thread_running
+
+    button_thread_running = False
+    if button_thread:
+        button_thread.join(timeout=1)
+
+    print("Button polling stopped")
+
+
 def setup_buttons():
-    """Setup GPIO pins for button inputs"""
+    """Setup GPIO pins for button inputs - preserving existing relay setup"""
+    global button_thread, button_thread_running
+
+    if MOCK_MODE:
+        print("Mock mode - button setup skipped")
+        return
+
     try:
-        # Clean up any existing event detection first
+        # Clean up only button-related event detection (don't wipe out relay setup)
         try:
             GPIO.remove_event_detect(SPEED_BUTTON_GPIO)
+            print(f"Removed existing event detection on GPIO {SPEED_BUTTON_GPIO}")
         except:
             pass  # Ignore if no event detection was set
 
         try:
             GPIO.remove_event_detect(TIMER_BUTTON_GPIO)
+            print(f"Removed existing event detection on GPIO {TIMER_BUTTON_GPIO}")
         except:
             pass  # Ignore if no event detection was set
 
         # Setup button pins as inputs with pull-up resistors
+        # (GPIO mode should already be set from relay setup)
         GPIO.setup(SPEED_BUTTON_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(TIMER_BUTTON_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
+        print(f"GPIO pins {SPEED_BUTTON_GPIO} and {TIMER_BUTTON_GPIO} configured as inputs")
 
-        # Add interrupt detection for button presses (falling edge = button press)
-        GPIO.add_event_detect(SPEED_BUTTON_GPIO, GPIO.FALLING,
-                            callback=speed_button_callback, bouncetime=200)
-        GPIO.add_event_detect(TIMER_BUTTON_GPIO, GPIO.FALLING,
-                            callback=timer_button_callback, bouncetime=200)
+        # Add event detection for speed button (individual error handling like button_test.py)
+        try:
+            GPIO.add_event_detect(SPEED_BUTTON_GPIO, GPIO.FALLING,
+                                callback=speed_button_callback, bouncetime=200)
+            print(f"✓ Speed button event detection added (GPIO {SPEED_BUTTON_GPIO})")
+        except RuntimeError as e:
+            print(f"✗ Failed to add speed button event detection: {e}")
+            # Don't return here, try polling fallback
+            start_button_polling()
+            return
 
-        print("Button GPIO pins configured successfully")
-        print(f"Speed button on pin {SPEED_BUTTON_GPIO}")
-        print(f"Timer button on pin {TIMER_BUTTON_GPIO}")
+        # Add event detection for timer button
+        try:
+            GPIO.add_event_detect(TIMER_BUTTON_GPIO, GPIO.FALLING,
+                                callback=timer_button_callback, bouncetime=200)
+            print(f"✓ Timer button event detection added (GPIO {TIMER_BUTTON_GPIO})")
+        except RuntimeError as e:
+            print(f"✗ Failed to add timer button event detection: {e}")
+            # Clean up the speed button event detection and fall back to polling
+            try:
+                GPIO.remove_event_detect(SPEED_BUTTON_GPIO)
+            except:
+                pass
+            start_button_polling()
+            return
+
+        print("Button GPIO pins configured successfully (edge detection)")
 
     except Exception as e:
         print(f"Error setting up buttons: {e}")
-        # If button setup fails, the web app can still work without hardware buttons
-        if not MOCK_MODE:
-            print("Hardware buttons will not work, but web interface will still function")
+        print("Falling back to polling method...")
+        start_button_polling()
 
 
 # === ACTIVE LEVEL SETTING ===

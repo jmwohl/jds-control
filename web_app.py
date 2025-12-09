@@ -505,6 +505,13 @@ except Exception as e:
 
 def cleanup_gpio():
     """Clean up GPIO on shutdown"""
+    # Stop button polling if it's running
+    try:
+        if hasattr(fan_control, 'stop_button_polling'):
+            fan_control.stop_button_polling()
+    except:
+        pass
+
     if not fan_control.MOCK_MODE:
         try:
             fan_control.GPIO.cleanup()
