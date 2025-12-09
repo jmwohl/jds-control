@@ -444,39 +444,63 @@ def timer_worker():
 
 def handle_button_speed_change(new_speed):
     """Callback function for hardware button speed changes"""
-    print(f"Hardware button changed speed to: {new_speed}")
+    try:
+        print(f"Hardware button changed speed to: {new_speed}")
 
-    # Use the same change_fan_speed function that the web interface uses
-    success, message = change_fan_speed(new_speed)
-    if success:
-        print(f"Speed changed via button: {message}")
-    else:
-        print(f"Error changing speed via button: {message}")
-
-
+        # Use the same change_fan_speed function that the web interface uses
+        success, message = change_fan_speed(new_speed)
+        if success:
+            print(f"Speed changed via button: {message}")
+        else:
+            print(f"Error changing speed via button: {message}")
+    except Exception as e:
+        print(f"Exception in button speed callback: {e}")
+        import traceback
+        traceback.print_exc()
 def handle_button_timer_change(new_timer):
     """Callback function for hardware button timer changes"""
-    print(f"Hardware button changed timer to: {new_timer}")
+    try:
+        print(f"Hardware button changed timer to: {new_timer}")
 
-    if new_timer == 'off':
-        cancel_timer()
-        print("Timer cancelled via button")
-    else:
-        # Convert timer state to hours
-        timer_hours = {'1hr': 1, '2hr': 2, '4hr': 4}.get(new_timer, 0)
-        if timer_hours > 0:
-            success, message = set_timer(timer_hours)
-            if success:
-                print(f"Timer set via button: {message}")
-            else:
-                print(f"Error setting timer via button: {message}")
-
-
+        if new_timer == 'off':
+            cancel_timer()
+            print("Timer cancelled via button")
+        else:
+            # Convert timer state to hours
+            timer_hours = {'1hr': 1, '2hr': 2, '4hr': 4}.get(new_timer, 0)
+            if timer_hours > 0:
+                success, message = set_timer(timer_hours)
+                if success:
+                    print(f"Timer set via button: {message}")
+                else:
+                    print(f"Error setting timer via button: {message}")
+    except Exception as e:
+        print(f"Exception in button timer callback: {e}")
+        import traceback
+        traceback.print_exc()
 # Register the callback functions with fan_control
-fan_control.register_speed_change_callback(handle_button_speed_change)
-fan_control.register_timer_change_callback(handle_button_timer_change)
+try:
+    print("Registering hardware button callbacks...")
 
-print("✓ Hardware button callbacks registered")
+    # Check if the registration functions exist
+    if hasattr(fan_control, 'register_speed_change_callback'):
+        fan_control.register_speed_change_callback(handle_button_speed_change)
+        print("  ✓ Speed button callback registered")
+    else:
+        print("  ⚠️  register_speed_change_callback function not found")
+
+    if hasattr(fan_control, 'register_timer_change_callback'):
+        fan_control.register_timer_change_callback(handle_button_timer_change)
+        print("  ✓ Timer button callback registered")
+    else:
+        print("  ⚠️  register_timer_change_callback function not found")
+
+    print("✓ Hardware button callbacks registered successfully")
+except Exception as e:
+    print(f"⚠️  Error registering button callbacks: {e}")
+    print("Buttons may not work, but web interface will still function")
+    import traceback
+    traceback.print_exc()
 
 
 if __name__ == '__main__':
