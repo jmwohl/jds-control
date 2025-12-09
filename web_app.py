@@ -503,7 +503,20 @@ except Exception as e:
     traceback.print_exc()
 
 
+def cleanup_gpio():
+    """Clean up GPIO on shutdown"""
+    if not fan_control.MOCK_MODE:
+        try:
+            fan_control.GPIO.cleanup()
+            print("GPIO cleaned up")
+        except:
+            pass  # Ignore cleanup errors
+
+
 if __name__ == '__main__':
+    import atexit
+    atexit.register(cleanup_gpio)
+
     print("Starting Fan Control Web Interface...")
     print(f"Mock Mode: {fan_control.MOCK_MODE}")
     print("Access the interface at: http://localhost:5002")
@@ -511,5 +524,11 @@ if __name__ == '__main__':
     # Initialize to off state
     change_fan_speed('off')
 
-    # Run the Flask app
-    app.run(host='0.0.0.0', port=5002, debug=True)
+    try:
+        # Run the Flask app
+        # Disable debug mode on Raspberry Pi to avoid GPIO conflicts from app restart
+        debug_mode = fan_control.MOCK_MODE  # Only enable debug in mock mode
+        app.run(host='0.0.0.0', port=5002, debug=debug_mode)
+    except KeyboardInterrupt:
+        print("\nShutting down...")
+        cleanup_gpio()

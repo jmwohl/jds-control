@@ -185,6 +185,17 @@ def timer_button_callback(pin):
 def setup_buttons():
     """Setup GPIO pins for button inputs"""
     try:
+        # Clean up any existing event detection first
+        try:
+            GPIO.remove_event_detect(SPEED_BUTTON_GPIO)
+        except:
+            pass  # Ignore if no event detection was set
+
+        try:
+            GPIO.remove_event_detect(TIMER_BUTTON_GPIO)
+        except:
+            pass  # Ignore if no event detection was set
+
         # Setup button pins as inputs with pull-up resistors
         GPIO.setup(SPEED_BUTTON_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
         GPIO.setup(TIMER_BUTTON_GPIO, GPIO.IN, pull_up_down=GPIO.PUD_UP)
@@ -201,6 +212,9 @@ def setup_buttons():
 
     except Exception as e:
         print(f"Error setting up buttons: {e}")
+        # If button setup fails, the web app can still work without hardware buttons
+        if not MOCK_MODE:
+            print("Hardware buttons will not work, but web interface will still function")
 
 
 # === ACTIVE LEVEL SETTING ===
